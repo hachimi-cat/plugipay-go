@@ -2,7 +2,7 @@ package plugipay
 
 import "context"
 
-// WebhookEndpointsResource — /api/v1/webhook-endpoints
+// WebhookEndpointsResource — /api/v1/webhooks
 type WebhookEndpointsResource struct{ c *Client }
 
 type WebhookEndpointCreateInput struct {
@@ -14,7 +14,7 @@ type WebhookEndpointCreateInput struct {
 func (r *WebhookEndpointsResource) List(ctx context.Context) ([]WebhookEndpoint, error) {
 	var out []WebhookEndpoint
 	err := r.c.Do(ctx, RequestOptions{
-		Method: "GET", Path: "/api/v1/webhook-endpoints",
+		Method: "GET", Path: "/api/v1/webhooks",
 	}, &out)
 	if err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func (r *WebhookEndpointsResource) List(ctx context.Context) ([]WebhookEndpoint,
 func (r *WebhookEndpointsResource) Create(ctx context.Context, in WebhookEndpointCreateInput) (*WebhookEndpoint, error) {
 	var out WebhookEndpoint
 	err := r.c.Do(ctx, RequestOptions{
-		Method: "POST", Path: "/api/v1/webhook-endpoints",
+		Method: "POST", Path: "/api/v1/webhooks",
 		Body: in, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
@@ -36,7 +36,7 @@ func (r *WebhookEndpointsResource) Create(ctx context.Context, in WebhookEndpoin
 
 func (r *WebhookEndpointsResource) Delete(ctx context.Context, id string) error {
 	return r.c.Do(ctx, RequestOptions{
-		Method: "DELETE", Path: "/api/v1/webhook-endpoints/" + id,
+		Method: "DELETE", Path: "/api/v1/webhooks/" + id,
 	}, nil)
 }
 

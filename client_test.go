@@ -408,7 +408,7 @@ func TestWebhookEndpoints_Delete_NoBody(t *testing.T) {
 		if r.Method != "DELETE" {
 			t.Errorf("method: %s", r.Method)
 		}
-		if r.URL.Path != "/api/v1/webhook-endpoints/we_1" {
+		if r.URL.Path != "/api/v1/webhooks/we_1" {
 			t.Errorf("path: %s", r.URL.Path)
 		}
 		assertSignedRequest(t, r, "sk_test_secret_supersecret", "ak_test_key")

@@ -42,16 +42,20 @@ const DefaultBaseURL = "https://plugipay.com"
 // is zero.
 const DefaultTimeout = 30 * time.Second
 
-// ClientOptions configures a Client. KeyID + Secret are required; the
-// rest default from env vars (PLUGIPAY_KEY_ID, PLUGIPAY_SECRET,
-// PLUGIPAY_BASE_URL, PLUGIPAY_ON_BEHALF_OF) so a zero-value
-// ClientOptions{} works in production environments where the standard
-// env vars are set.
+// ClientOptions configures a Client. KeyID + Secret (or APIKey) are
+// required; the rest default from env vars (PLUGIPAY_KEY_ID,
+// PLUGIPAY_SECRET, PLUGIPAY_API_KEY, PLUGIPAY_BASE_URL,
+// PLUGIPAY_ON_BEHALF_OF) so a zero-value ClientOptions{} works in
+// production environments where the standard env vars are set.
 type ClientOptions struct {
 	// HMAC access key id (e.g. "ak_live_..."). Defaults to PLUGIPAY_KEY_ID.
 	KeyID string
 	// HMAC secret. Defaults to PLUGIPAY_SECRET.
 	Secret string
+	// A key minted in the dashboard (Settings → API keys), "pk_live_…" /
+	// "pk_test_…": sent as "Authorization: Bearer <key>" instead of signing
+	// with KeyID + Secret. Defaults to PLUGIPAY_API_KEY.
+	APIKey string
 	// Base URL. Defaults to PLUGIPAY_BASE_URL or DefaultBaseURL.
 	BaseURL string
 	// Optional merchant accountId to scope calls against. Forwarded as
@@ -70,6 +74,7 @@ type ClientOptions struct {
 type Client struct {
 	keyID             string
 	secret            string
+	apiKey            string
 	baseURL           string
 	defaultOnBehalfOf string
 	timeout           time.Duration
@@ -101,6 +106,10 @@ type Client struct {
 	Account          *AccountResource
 	AdminPortal      *AdminPortalResource
 	Admin            *AdminResource
+
+	// API has every feature route, one method each (generated from the API
+	// spec: api_generated.go), sent like every other call.
+	API *GeneratedAPI
 }
 
 // NewClient builds a configured client. Returns an error if KeyID or
@@ -112,17 +121,20 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	if opts.Secret == "" {
 		opts.Secret = os.Getenv("PLUGIPAY_SECRET")
 	}
+	if opts.APIKey == "" && opts.KeyID == "" {
+		opts.APIKey = os.Getenv("PLUGIPAY_API_KEY")
+	}
 	if opts.BaseURL == "" {
 		opts.BaseURL = os.Getenv("PLUGIPAY_BASE_URL")
 	}
 	if opts.OnBehalfOf == "" {
 		opts.OnBehalfOf = os.Getenv("PLUGIPAY_ON_BEHALF_OF")
 	}
-	if opts.KeyID == "" {
+	if opts.APIKey == "" && opts.KeyID == "" {
 		return nil, newErr(0, "missing_key_id",
-			"set PLUGIPAY_KEY_ID env or ClientOptions.KeyID")
+			"set PLUGIPAY_KEY_ID env or ClientOptions.KeyID (or ClientOptions.APIKey)")
 	}
-	if opts.Secret == "" {
+	if opts.APIKey == "" && opts.Secret == "" {
 		return nil, newErr(0, "missing_secret",
 			"set PLUGIPAY_SECRET env or ClientOptions.Secret")
 	}
@@ -138,6 +150,7 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	c := &Client{
 		keyID:             opts.KeyID,
 		secret:            opts.Secret,
+		apiKey:            opts.APIKey,
 		baseURL:           strings.TrimRight(opts.BaseURL, "/"),
 		defaultOnBehalfOf: opts.OnBehalfOf,
 		timeout:           opts.Timeout,
@@ -147,6 +160,27 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	return c, nil
 }
 
+// apigenRequest is the call behind Client.API (api_generated.go): the same
+// signing (or dashboard key), idempotency key on writes and envelope handling
+// as every hand-written call.
+func (c *Client) apigenRequest(ctx context.Context, method, path string, query url.Values, body map[string]any) (json.RawMessage, error) {
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
+	opts := RequestOptions{Method: strings.ToUpper(method), Path: path}
+	if body != nil {
+		opts.Body = body
+	}
+	if opts.Method != http.MethodGet {
+		opts.IdempotencyKey = genIdem()
+	}
+	env, err := c.do(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
 // ForMerchant returns a shallow clone scoped to a different on-behalf-of
 // account id — useful when a platform-admin key is reused across many
 // merchant accounts. The clone shares the underlying *http.Client.
@@ -154,6 +188,7 @@ func (c *Client) ForMerchant(accountID string) *Client {
 	clone := &Client{
 		keyID:             c.keyID,
 		secret:            c.secret,
+		apiKey:            c.apiKey,
 		baseURL:           c.baseURL,
 		defaultOnBehalfOf: accountID,
 		timeout:           c.timeout,
@@ -251,12 +286,6 @@ func (c *Client) do(ctx context.Context, opts RequestOptions) (*APIEnvelope, err
 	if bodyBytes != nil {
 		bodyStr = string(bodyBytes)
 	}
-	sig := Sign(c.secret, SignInput{
-		Method:         opts.Method,
-		Path:           opts.Path,
-		Body:           bodyStr,
-		IdempotencyKey: opts.IdempotencyKey,
-	})
 
 	url := c.baseURL + opts.Path
 	var reqBody io.Reader
@@ -269,8 +298,19 @@ func (c *Client) do(ctx context.Context, opts RequestOptions) (*APIEnvelope, err
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", AuthorizationHeader(c.keyID, sig.Signature))
-	req.Header.Set("X-Plugipay-Timestamp", sig.Timestamp)
+	if c.apiKey != "" {
+		// A dashboard key: sent as is, nothing to sign.
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	} else {
+		sig := Sign(c.secret, SignInput{
+			Method:         opts.Method,
+			Path:           opts.Path,
+			Body:           bodyStr,
+			IdempotencyKey: opts.IdempotencyKey,
+		})
+		req.Header.Set("Authorization", AuthorizationHeader(c.keyID, sig.Signature))
+		req.Header.Set("X-Plugipay-Timestamp", sig.Timestamp)
+	}
 	if bodyBytes != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -410,6 +450,7 @@ func qs(params map[string]any) string {
 }
 
 func (c *Client) installResources() {
+	c.API = &GeneratedAPI{c: c}
 	c.Customers = &CustomersResource{c: c}
 	c.Plans = &PlansResource{c: c}
 	c.CheckoutSessions = &CheckoutSessionsResource{c: c}
