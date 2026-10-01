@@ -9,21 +9,27 @@ type TemplateListParams struct {
 	Kind *TemplateKind `json:"kind,omitempty"`
 }
 
+// TemplateCreateInput creates a receipt, invoice or checkout template. Config holds the
+// kind's settings, e.g. {"accentColor": "#0F766E", "footerText": "…"}; nil sends {}
+// (every setting at its default).
 type TemplateCreateInput struct {
-	Kind     TemplateKind   `json:"kind"`
-	Name     string         `json:"name"`
-	Document map[string]any `json:"document"`
+	Kind      TemplateKind   `json:"kind"`
+	Name      string         `json:"name"`
+	IsDefault *bool          `json:"isDefault,omitempty"`
+	Config    map[string]any `json:"config"`
 }
 
+// TemplateUpdateInput renames a template or replaces its Config (the whole config:
+// settings left out reset to their defaults).
 type TemplateUpdateInput struct {
-	Name     *string        `json:"name,omitempty"`
-	Document map[string]any `json:"document,omitempty"`
+	Name   *string        `json:"name,omitempty"`
+	Config map[string]any `json:"config,omitempty"`
 }
 
+// TemplatePreviewInput renders a kind + config as HTML with sample data.
 type TemplatePreviewInput struct {
-	Kind       TemplateKind   `json:"kind"`
-	Document   map[string]any `json:"document"`
-	SampleData map[string]any `json:"sampleData,omitempty"`
+	Kind   TemplateKind   `json:"kind"`
+	Config map[string]any `json:"config"`
 }
 
 type TemplatePreviewResult struct {
@@ -60,6 +66,9 @@ func (r *TemplatesResource) Get(ctx context.Context, id string) (*Template, erro
 }
 
 func (r *TemplatesResource) Create(ctx context.Context, in TemplateCreateInput) (*Template, error) {
+	if in.Config == nil {
+		in.Config = map[string]any{}
+	}
 	var out Template
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "POST", Path: "/api/v1/templates",
@@ -74,7 +83,7 @@ func (r *TemplatesResource) Create(ctx context.Context, in TemplateCreateInput) 
 func (r *TemplatesResource) Update(ctx context.Context, id string, patch TemplateUpdateInput) (*Template, error) {
 	var out Template
 	err := r.c.Do(ctx, RequestOptions{
-		Method: "PATCH", Path: "/api/v1/templates/" + id, Body: patch,
+		Method: "PATCH", Path: "/api/v1/templates/" + id, Body: patch, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
 		return nil, err
@@ -86,7 +95,7 @@ func (r *TemplatesResource) MakeDefault(ctx context.Context, id string) (*Templa
 	var out Template
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "POST", Path: "/api/v1/templates/" + id + "/make-default",
-		Body: map[string]any{},
+		Body: map[string]any{}, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
 		return nil, err
@@ -94,31 +103,37 @@ func (r *TemplatesResource) MakeDefault(ctx context.Context, id string) (*Templa
 	return &out, nil
 }
 
+// Duplicate copies a template. The API names the copy "<name> (copy)"; a non-empty
+// name renames it straight after (a second request).
 func (r *TemplatesResource) Duplicate(ctx context.Context, id string, name *string) (*Template, error) {
-	body := map[string]any{}
-	if name != nil && *name != "" {
-		body["name"] = *name
-	}
 	var out Template
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "POST", Path: "/api/v1/templates/" + id + "/duplicate",
-		Body: body, IdempotencyKey: genIdem(),
+		Body: map[string]any{}, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	if name == nil || *name == "" {
+		return &out, nil
+	}
+	return r.Update(ctx, out.ID, TemplateUpdateInput{Name: name})
 }
 
+// Preview renders a kind + config as HTML with sample data, without saving anything.
 func (r *TemplatesResource) Preview(ctx context.Context, in TemplatePreviewInput) (*TemplatePreviewResult, error) {
-	var out TemplatePreviewResult
+	if in.Config == nil {
+		in.Config = map[string]any{}
+	}
+	// The route answers with the page itself (text/html), which Do hands back as a string.
+	var html string
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "POST", Path: "/api/v1/templates/preview", Body: in,
-	}, &out)
+	}, &html)
 	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	return &TemplatePreviewResult{HTML: html}, nil
 }
 
 func (r *TemplatesResource) Delete(ctx context.Context, id string) error {

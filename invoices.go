@@ -32,7 +32,7 @@ type InvoiceListParams struct {
 func (r *InvoicesResource) Create(ctx context.Context, in InvoiceCreateInput) (*Invoice, error) {
 	var out Invoice
 	err := r.c.Do(ctx, RequestOptions{
-		Method: "POST", Path: "/api/v1/invoices", Body: in,
+		Method: "POST", Path: "/api/v1/invoices", Body: in, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (r *InvoicesResource) Finalize(ctx context.Context, id string) (*Invoice, e
 	var out Invoice
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "POST", Path: "/api/v1/invoices/" + id + "/finalize",
-		Body: map[string]any{},
+		Body: map[string]any{}, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
 		return nil, err

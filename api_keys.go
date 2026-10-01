@@ -5,9 +5,12 @@ import "context"
 // ApiKeysResource — /api/v1/api-keys
 type ApiKeysResource struct{ c *Client }
 
+// ApiKeyCreateInput: a name, the environment ("test", the default, or "live") and the
+// scopes (all merchant scopes when empty).
 type ApiKeyCreateInput struct {
-	Description *string `json:"description,omitempty"`
-	Scope       *string `json:"scope,omitempty"`
+	Name        string   `json:"name"`
+	Environment *string  `json:"environment,omitempty"`
+	Scopes      []string `json:"scopes,omitempty"`
 }
 
 func (r *ApiKeysResource) List(ctx context.Context) ([]ApiKey, error) {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0
+Hand-written methods that could never succeed against the API now send what their routes require. Some signatures and structs changed (a minor bump in 0.x); every changed call failed before.
+- `Customers.Update` sends an `Idempotency-Key` (every call was `400`); `CustomerUpdateInput` gains `ExternalID`, `TaxID`, `DefaultPaymentTokenID`, `Metadata`.
+- `PlanCreateInput` is the API's shape: `Name`, `Interval`, `Prices []PriceInput`, `PortalFeatures *PortalFeatures` (nil sends `DefaultPortalFeatures`), `Description`, `IntervalCount`, `TrialDays`, …. `Currency` + `Amount` are the shorthand for one flat price. `Plan` is what the API returns (`Prices []Price`, `PortalFeatures`, `IntervalCount`, …; no plan-level `Currency` / `Amount`).
+- Templates: `Template.Config`, `TemplateCreateInput{Kind, Name, IsDefault, Config}`, `TemplateUpdateInput{Name, Config}`, `TemplatePreviewInput{Kind, Config}` (the API never took `Document`; `SampleData` is gone). `Preview` returns the HTML page the route answers with (it failed with `invalid_response`). `Duplicate` with a name renames the copy with a second request.
+- Any 2xx with an empty body (every DELETE answers 204) is success; it failed with `invalid_response`, so `Templates.Delete`, `WebhookEndpoints.Delete`, `ApiKeys.Revoke`, … never succeeded.
+- `Adapters.UpdateXendit` / `UpdatePaypal` / `UpdateMidtrans` / `UpdateManual` take typed inputs (`XenditAdapterInput`, …) and send an `Idempotency-Key` (every call was `400`). `Adapters.List` returns the adapters sorted by kind (it failed decoding the object the API answers). `AdapterConfig` and `ManagedOnboardingState` are the API's shapes.
+- `ManagedOnboardingStartInput{Email}`, `ManagedOnboardingSimulateInput{KybStatus, CapabilitiesStatus, PayoutsReady}`; `Onboarding.ProvisionManaged(ctx)` takes no input and returns `*ProvisionManagedResult`.
+- `CheckoutSettingsUpdateInput` has the fields the API takes (`BrandName`, `BrandAccentColor`, `Business*`, `EnabledMethods`, …); `BrandColor`, `DefaultTemplateID`, `TermsURL`, `PrivacyURL` were refused. `CheckoutSettings` is the API's shape. `Billing.ListPlans` returns `[]BillingPlan`.
+- `ApiKeyCreateInput{Name, Environment, Scopes}` (person-only: a key still gets `403`). `Invoices.Create` and `Invoices.Finalize` send an `Idempotency-Key`.
+- The routes-exist test now also fails a hand-written method that sends no `Idempotency-Key` where the route takes one, or whose body (every input field filled in, by reflection) the route's schema refuses.
+
 ## 0.3.0
 - `Uploads.Image` sends the image as `multipart/form-data` in the field `file`, which is what `POST /api/v1/uploads/image` takes; it sent JSON before and always got 400. `UploadImageInput` gains `File io.Reader` and `ContentType` (`Base64` + `Filename` + `Mime` still work). `UploadedFile` is what the API returns: `URL`, `FileName`, `FileSize` (it listed fields the API never sent).
 - `API.UploadsImage(ctx, &UploadsImageArgs{File: FormFile{…}})` and `API.PublicCheckoutSessionsProofImage` upload a file (`FormFile{Name, Content io.Reader}`); they took no file before.

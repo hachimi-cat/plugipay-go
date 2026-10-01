@@ -13,10 +13,15 @@ type CustomerCreateInput struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
+// CustomerUpdateInput changes a customer; only the fields set change.
 type CustomerUpdateInput struct {
-	Email *string `json:"email,omitempty"`
-	Name  *string `json:"name,omitempty"`
-	Phone *string `json:"phone,omitempty"`
+	Email                 *string           `json:"email,omitempty"`
+	Name                  *string           `json:"name,omitempty"`
+	Phone                 *string           `json:"phone,omitempty"`
+	ExternalID            *string           `json:"externalId,omitempty"`
+	TaxID                 *string           `json:"taxId,omitempty"`
+	DefaultPaymentTokenID *string           `json:"defaultPaymentTokenId,omitempty"`
+	Metadata              map[string]string `json:"metadata,omitempty"`
 }
 
 type CustomerListParams struct {
@@ -62,7 +67,7 @@ func (r *CustomersResource) List(ctx context.Context, params CustomerListParams)
 func (r *CustomersResource) Update(ctx context.Context, id string, patch CustomerUpdateInput) (*Customer, error) {
 	var out Customer
 	err := r.c.Do(ctx, RequestOptions{
-		Method: "PATCH", Path: "/api/v1/customers/" + id, Body: patch,
+		Method: "PATCH", Path: "/api/v1/customers/" + id, Body: patch, IdempotencyKey: genIdem(),
 	}, &out)
 	if err != nil {
 		return nil, err

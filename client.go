@@ -427,6 +427,17 @@ func (c *Client) send(ctx context.Context, opts RequestOptions, body []byte, sig
 			"failed to read response: "+err.Error())
 	}
 
+	// DELETE-style routes answer 204 with no body: nothing to decode.
+	if res.StatusCode < 400 && len(bytes.TrimSpace(raw)) == 0 {
+		return &APIEnvelope{}, nil
+	}
+	// A route that renders a page (POST /templates/preview) answers 2xx with the HTML
+	// itself, not an envelope: it becomes the data, as a JSON string.
+	if res.StatusCode < 400 && strings.HasPrefix(strings.ToLower(res.Header.Get("Content-Type")), "text/html") {
+		text, _ := json.Marshal(string(raw))
+		return &APIEnvelope{Data: text}, nil
+	}
+
 	var env APIEnvelope
 	if jsonErr := json.Unmarshal(raw, &env); jsonErr != nil {
 		snippet := string(raw)

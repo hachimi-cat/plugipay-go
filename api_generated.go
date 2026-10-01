@@ -21,7 +21,7 @@ type apigenTransport interface {
 	apigenForm(ctx context.Context, method, path string, query url.Values, form map[string]string, files map[string]FormFile) (json.RawMessage, error)
 }
 
-// GeneratedAPI has all 139 feature routes of the Plugipay API, one method each
+// GeneratedAPI has all 140 feature routes of the Plugipay API, one method each
 // (generated from the API spec). A method takes the path parameters, then an *<Method>Args
 // with the query fields (tagged query) and the JSON body fields (tagged json): required
 // fields are plain values, optional ones pointers, slices or maps that nil leaves out,
@@ -1099,6 +1099,11 @@ func (a *GeneratedAPI) EventsTrigger(ctx context.Context, p *EventsTriggerArgs) 
 		return nil, apigenMissing("EventsTrigger", "AggregateID")
 	}
 	return a.c.apigenRequest(ctx, "POST", "/api/v1/events/trigger", nil, payload)
+}
+
+// EventsTypes calls GET /api/v1/events/types: List event types.
+func (a *GeneratedAPI) EventsTypes(ctx context.Context) (json.RawMessage, error) {
+	return a.c.apigenRequest(ctx, "GET", "/api/v1/events/types", nil, nil)
 }
 
 // GiftCardsCreateArgs are the inputs of GeneratedAPI.GiftCardsCreate.

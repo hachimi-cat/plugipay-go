@@ -127,15 +127,36 @@ type Customer struct {
 }
 
 type Plan struct {
-	ID        string       `json:"id"`
-	AccountID string       `json:"accountId"`
-	Name      string       `json:"name"`
-	Currency  CurrencyCode `json:"currency"`
-	Interval  string       `json:"interval"`
-	Amount    int64        `json:"amount"`
-	Active    bool         `json:"active"`
-	CreatedAt string       `json:"createdAt"`
-	UpdatedAt string       `json:"updatedAt"`
+	ID              string            `json:"id"`
+	ARN             string            `json:"arn"`
+	AccountID       string            `json:"accountId"`
+	Name            string            `json:"name"`
+	Description     *string           `json:"description"`
+	Interval        string            `json:"interval"`
+	IntervalCount   int               `json:"intervalCount"`
+	TrialDays       int               `json:"trialDays"`
+	Prices          []Price           `json:"prices"` // a plan's amounts live on its prices
+	UsageAggregate  *string           `json:"usageAggregate"`
+	MeteredUnit     *string           `json:"meteredUnit"`
+	PortalFeatures  *PortalFeatures   `json:"portalFeatures"`
+	DunningPolicyID *string           `json:"dunningPolicyId"`
+	Active          bool              `json:"active"`
+	ArchivedAt      *string           `json:"archivedAt"`
+	Metadata        map[string]string `json:"metadata"`
+	CreatedAt       string            `json:"createdAt"`
+	UpdatedAt       string            `json:"updatedAt"`
+}
+
+type Price struct {
+	ID         string       `json:"id"`
+	PlanID     string       `json:"planId"`
+	Currency   CurrencyCode `json:"currency"`
+	Model      string       `json:"model"` // flat | tiered | volume | usage
+	UnitAmount *int64       `json:"unitAmount"`
+	Tiers      []PriceTier  `json:"tiers"`
+	TaxMode    string       `json:"taxMode"`
+	Active     bool         `json:"active"`
+	CreatedAt  string       `json:"createdAt"`
 }
 
 type CheckoutSession struct {
@@ -377,17 +398,29 @@ type Refund struct {
 	UpdatedAt     string       `json:"updatedAt"`
 }
 
+// AdapterConfig is a connected provider, per mode. Secrets are never returned:
+// SecretKeyLast4 and the masked PublicConfig stand for them.
 type AdapterConfig struct {
-	Kind         AdapterKind    `json:"kind"`
-	Configured   bool           `json:"configured"`
-	PublicConfig map[string]any `json:"publicConfig,omitempty"`
-	UpdatedAt    string         `json:"updatedAt,omitempty"`
+	Kind           string         `json:"kind"`   // xendit | paypal | midtrans | manual | managed
+	Status         string         `json:"status"` // unconfigured | active | error
+	SecretKeyLast4 *string        `json:"secretKeyLast4"`
+	PublicConfig   map[string]any `json:"publicConfig"`
+	ConfiguredAt   *string        `json:"configuredAt"`
+	LastErrorAt    *string        `json:"lastErrorAt"`
+	LastErrorCode  *string        `json:"lastErrorCode"`
 }
 
+// ManagedOnboardingState is the managed (xenPlatform) sub-account behind managed payments.
 type ManagedOnboardingState struct {
-	State    string         `json:"state"`
-	Provider string         `json:"provider"`
-	Details  map[string]any `json:"details,omitempty"`
+	SubAccountID       string  `json:"subAccountId"`
+	Email              *string `json:"email"`
+	OnboardingURL      *string `json:"onboardingUrl"`
+	KybStatus          string  `json:"kybStatus"`
+	CapabilitiesStatus string  `json:"capabilitiesStatus"`
+	PayoutsReady       bool    `json:"payoutsReady"`
+	LastWebhookAt      *string `json:"lastWebhookAt"`
+	CreatedAt          string  `json:"createdAt"`
+	UpdatedAt          string  `json:"updatedAt"`
 }
 
 type ApiKey struct {
@@ -407,7 +440,7 @@ type Template struct {
 	Kind      TemplateKind   `json:"kind"`
 	Name      string         `json:"name"`
 	IsDefault bool           `json:"isDefault"`
-	Document  map[string]any `json:"document"`
+	Config    map[string]any `json:"config"` // the kind's settings
 	CreatedAt string         `json:"createdAt"`
 	UpdatedAt string         `json:"updatedAt"`
 }
@@ -470,14 +503,30 @@ type BillingTier struct {
 	Features []string `json:"features"`
 }
 
+// BillingPlan is one of Plugipay's own plans (Billing.ListPlans): Price is IDR per
+// month, -1 when the plan has no fixed price.
+type BillingPlan struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Price int64  `json:"price"`
+}
+
+// CheckoutSettings: the hosted checkout's payment methods, branding and business details.
 type CheckoutSettings struct {
-	AccountID         string  `json:"accountId"`
-	BrandLogoURL      *string `json:"brandLogoUrl"`
-	BrandColor        *string `json:"brandColor"`
-	DefaultTemplateID *string `json:"defaultTemplateId"`
-	TermsURL          *string `json:"termsUrl"`
-	PrivacyURL        *string `json:"privacyUrl"`
-	UpdatedAt         string  `json:"updatedAt"`
+	EnabledMethods   []string            `json:"enabledMethods"`
+	MethodOrder      []string            `json:"methodOrder"`
+	MethodAdapter    map[string]string   `json:"methodAdapter"`
+	BrandName        *string             `json:"brandName"`
+	BrandLogoURL     *string             `json:"brandLogoUrl"`
+	BrandAccentColor *string             `json:"brandAccentColor"`
+	BrandTagline     *string             `json:"brandTagline"`
+	BusinessPhone    *string             `json:"businessPhone"`
+	BusinessEmail    *string             `json:"businessEmail"`
+	BusinessAddress  *string             `json:"businessAddress"`
+	BusinessTaxID    *string             `json:"businessTaxId"`
+	ReceiptTemplate  map[string]any      `json:"receiptTemplate"`
+	AvailableMethods []string            `json:"availableMethods"` // computed
+	MethodSupport    map[string][]string `json:"methodSupport"`    // computed
 }
 
 type AdminPortalIdentity struct {
