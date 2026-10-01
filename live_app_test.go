@@ -177,6 +177,43 @@ func TestLiveApp(t *testing.T) {
 		}
 	})
 
+	t.Run("WebhookEndpoints+Deliveries", func(t *testing.T) {
+		ep, err := c.WebhookEndpoints.Create(ctx, WebhookEndpointCreateInput{URL: "https://merchant.example/go-" + tag(), Events: []string{"invoice.paid"}})
+		must(err)
+		defer func() { must(c.WebhookEndpoints.Delete(ctx, ep.ID)) }()
+		if ep.Mode != "live" || ep.ConsecutiveFailures != 0 || ep.DisabledAt != nil || len(ep.Events) != 1 || ep.Events[0] != "plugipay.invoice.paid.v1" {
+			t.Fatalf("create: %+v", ep)
+		}
+		off := false
+		paused, err := c.WebhookEndpoints.Update(ctx, ep.ID, WebhookEndpointUpdateInput{Active: &off, Description: str("paused")})
+		must(err)
+		if paused.Active || paused.Description == nil || *paused.Description != "paused" {
+			t.Fatalf("pause: %+v", paused)
+		}
+		on := true
+		back, err := c.WebhookEndpoints.Update(ctx, ep.ID, WebhookEndpointUpdateInput{Active: &on})
+		must(err)
+		if !back.Active || back.DisabledReason != nil {
+			t.Fatalf("re-enable: %+v", back)
+		}
+		failed := WebhookDeliveryFailed
+		limit := 5
+		page, err := c.WebhookEndpoints.ListDeliveries(ctx, WebhookDeliveryListParams{EndpointID: &ep.ID, Status: &failed, Limit: &limit})
+		must(err)
+		if len(page.Data) != 0 || page.HasMore {
+			t.Fatalf("deliveries: %+v", page)
+		}
+		for name, call := range map[string]func() error{
+			"GetDelivery":   func() error { _, err := c.WebhookEndpoints.GetDelivery(ctx, "whd_missing"); return err },
+			"RetryDelivery": func() error { _, err := c.WebhookEndpoints.RetryDelivery(ctx, "whd_missing"); return err },
+		} {
+			var pe *Error
+			if err := call(); !errors.As(err, &pe) || pe.Status != 404 {
+				t.Fatalf("%s of a missing delivery: %v", name, err)
+			}
+		}
+	})
+
 	t.Run("ManagedOnboarding", func(t *testing.T) {
 		if os.Getenv("PLUGIPAY_LIVE_MANAGED") != "1" {
 			t.Skip("managed payments are switched off on this API")

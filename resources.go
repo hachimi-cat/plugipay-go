@@ -333,14 +333,69 @@ type CashFlowReport struct {
 
 type WebhookEndpoint struct {
 	ID          string   `json:"id"`
-	AccountID   string   `json:"accountId"`
+	AccountID   string   `json:"accountId,omitempty"` // only on create
+	Mode        string   `json:"mode"`                // live or test: it receives only that mode's events
 	URL         string   `json:"url"`
 	Events      []string `json:"events"`
 	Description *string  `json:"description"`
 	Active      bool     `json:"active"`
-	Secret      string   `json:"secret,omitempty"` // only on create
-	CreatedAt   string   `json:"createdAt"`
-	UpdatedAt   string   `json:"updatedAt"`
+	// ConsecutiveFailures counts failed delivery attempts in a row since the last 2xx;
+	// FailingSince is when that run started (nil while healthy).
+	ConsecutiveFailures int     `json:"consecutiveFailures"`
+	FailingSince        *string `json:"failingSince"`
+	// DisabledAt / DisabledReason are set when Plugipay switched the endpoint off because
+	// it kept failing (20 failed attempts in a row over at least 24 hours); nil for a
+	// manual pause. Re-enable with Update(…, Active: true).
+	DisabledAt     *string `json:"disabledAt"`
+	DisabledReason *string `json:"disabledReason"`
+	Secret         string  `json:"secret,omitempty"` // only on create
+	CreatedAt      string  `json:"createdAt"`
+	UpdatedAt      string  `json:"updatedAt"`
+}
+
+type WebhookDeliveryStatus string
+
+const (
+	WebhookDeliveryPending   WebhookDeliveryStatus = "pending"
+	WebhookDeliverySucceeded WebhookDeliveryStatus = "succeeded"
+	WebhookDeliveryFailed    WebhookDeliveryStatus = "failed"
+)
+
+// WebhookDelivery is one event sent to one endpoint (WebhookEndpoints.ListDeliveries).
+type WebhookDelivery struct {
+	ID         string `json:"id"`
+	EndpointID string `json:"endpointId"`
+	// EventID is the event's id (evt_…): the body's id, the same on every attempt.
+	EventID string `json:"eventId"`
+	Type    string `json:"type"`
+	// Body is the exact JSON sent on every attempt.
+	Body     string                `json:"body"`
+	Status   WebhookDeliveryStatus `json:"status"`
+	Attempts int                   `json:"attempts"`
+	// NextRetryAt is when it is next due; nil once succeeded or failed.
+	NextRetryAt   *string `json:"nextRetryAt"`
+	LastAttemptAt *string `json:"lastAttemptAt"`
+	DeliveredAt   *string `json:"deliveredAt"`
+	ResponseCode  *int    `json:"responseCode"`
+	LastError     *string `json:"lastError"`
+	CreatedAt     string  `json:"createdAt"`
+	UpdatedAt     string  `json:"updatedAt"`
+	// AttemptLog is every attempt, oldest first.
+	AttemptLog []WebhookDeliveryAttempt `json:"attemptLog"`
+}
+
+// WebhookDeliveryAttempt is one try at a delivery.
+type WebhookDeliveryAttempt struct {
+	AttemptNumber int    `json:"attemptNumber"`
+	Status        string `json:"status"` // succeeded or failed
+	// ResponseCode is nil when no response came back (a timeout, a refused connection).
+	ResponseCode *int `json:"responseCode"`
+	DurationMs   int  `json:"durationMs"`
+	// Error is why it failed: "HTTP 503", "timed out after 10000ms", …
+	Error *string `json:"error"`
+	// NextRetryAt is the retry this failure scheduled; nil on success or when it gave up.
+	NextRetryAt *string `json:"nextRetryAt"`
+	AttemptedAt string  `json:"attemptedAt"`
 }
 
 type EventRecord struct {
@@ -423,15 +478,18 @@ type ManagedOnboardingState struct {
 	UpdatedAt          string  `json:"updatedAt"`
 }
 
+// ApiKey is a dashboard API key (pk_test_… / pk_live_…). Revoking deletes it.
 type ApiKey struct {
-	ID          string  `json:"id"`
-	AccountID   string  `json:"accountId"`
-	KeyID       string  `json:"keyId"`
-	Description *string `json:"description"`
-	Scope       string  `json:"scope"`
-	Secret      string  `json:"secret,omitempty"` // only on create
-	CreatedAt   string  `json:"createdAt"`
-	RevokedAt   *string `json:"revokedAt"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// KeyPrefix is the key's first 12 characters, to tell keys apart.
+	KeyPrefix   string   `json:"keyPrefix"`
+	Environment string   `json:"environment"` // test or live
+	Scopes      []string `json:"scopes"`
+	LastUsedAt  *string  `json:"lastUsedAt"`
+	CreatedAt   string   `json:"createdAt"`
+	// Key is the whole key — only on create.
+	Key string `json:"key,omitempty"`
 }
 
 type Template struct {
@@ -496,11 +554,35 @@ type WorkspaceMember struct {
 	JoinedAt string `json:"joinedAt"`
 }
 
+// BillingTier is one of Plugipay's own plans (Billing.ListTiers). A nil limit is
+// unlimited.
 type BillingTier struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Monthly  int64    `json:"monthly"`
-	Features []string `json:"features"`
+	ID   string `json:"id"` // starter, growth, scale or enterprise
+	Name string `json:"name"`
+	// PriceMonthlyIDR is IDR per month; nil when negotiated.
+	PriceMonthlyIDR *int64 `json:"priceMonthlyIdr"`
+	// PriceMonthlyUSDCents is USD cents per month for merchants billed in USD; nil when
+	// the tier has no USD price.
+	PriceMonthlyUSDCents *int64 `json:"priceMonthlyUsdCents"`
+	// ChannelFeeRate is Plugipay's fee per transaction, 0–1.
+	ChannelFeeRate      float64            `json:"channelFeeRate"`
+	MonthlyTxnCap       *int64             `json:"monthlyTxnCap"`
+	MaxWebhookEndpoints *int64             `json:"maxWebhookEndpoints"`
+	MaxAPIKeys          *int64             `json:"maxApiKeys"`
+	CustomBranding      bool               `json:"customBranding"`
+	DailyPayouts        bool               `json:"dailyPayouts"`
+	Support             BillingTierSupport `json:"support"`
+	Tagline             string             `json:"tagline"`
+	// AgentCredits is the monthly assistant credits the tier grants.
+	AgentCredits int64    `json:"agentCredits"`
+	Features     []string `json:"features"`
+}
+
+// BillingTierSupport is a tier's support level.
+type BillingTierSupport struct {
+	Tier          string `json:"tier"` // community, email, priority or dedicated
+	ResponseHours *int   `json:"responseHours"`
+	SLA           bool   `json:"sla"`
 }
 
 // BillingPlan is one of Plugipay's own plans (Billing.ListPlans): Price is IDR per

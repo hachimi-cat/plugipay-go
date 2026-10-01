@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+- `WebhookEndpoints.Update(ctx, id, WebhookEndpointUpdateInput)` (`Active: &true` re-enables an endpoint Plugipay switched off for failing and clears its failure streak), and the delivery log: `WebhookEndpoints.ListDeliveries(ctx, WebhookDeliveryListParams)` (a `Page[WebhookDelivery]`), `GetDelivery`, `RetryDelivery`. New types `WebhookDelivery`, `WebhookDeliveryAttempt`, `WebhookDeliveryStatus`.
+- `WebhookEndpoint` has `Mode`, `ConsecutiveFailures`, `FailingSince`, `DisabledAt` and `DisabledReason`.
+- `ApiKey` is the key the API returns: `ID`, `Name`, `KeyPrefix`, `Environment`, `Scopes`, `LastUsedAt`, `CreatedAt`, `Key` (it had `KeyID`, `Description`, `Scope`, `Secret`, `RevokedAt`, which the API never sent).
+- `BillingTier` is the tier the API returns: `PriceMonthlyIDR`, `PriceMonthlyUSDCents`, `ChannelFeeRate`, `MonthlyTxnCap` / `MaxWebhookEndpoints` / `MaxAPIKeys` (nil is unlimited), `CustomBranding`, `DailyPayouts`, `Support` (`BillingTierSupport`), `Tagline`, `AgentCredits`, `Features` (it had `Monthly`, which the API never sent).
+- `client.API`: `WebhooksDeliveries`, `WebhooksGetDeliveries`, `WebhooksDeliveriesRetry` (regenerated).
+
 ## 0.4.0
 Hand-written methods that could never succeed against the API now send what their routes require. Some signatures and structs changed (a minor bump in 0.x); every changed call failed before.
 - `Customers.Update` sends an `Idempotency-Key` (every call was `400`); `CustomerUpdateInput` gains `ExternalID`, `TaxID`, `DefaultPaymentTokenID`, `Metadata`.

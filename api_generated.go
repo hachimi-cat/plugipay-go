@@ -21,7 +21,7 @@ type apigenTransport interface {
 	apigenForm(ctx context.Context, method, path string, query url.Values, form map[string]string, files map[string]FormFile) (json.RawMessage, error)
 }
 
-// GeneratedAPI has all 140 feature routes of the Plugipay API, one method each
+// GeneratedAPI has all 143 feature routes of the Plugipay API, one method each
 // (generated from the API spec). A method takes the path parameters, then an *<Method>Args
 // with the query fields (tagged query) and the JSON body fields (tagged json): required
 // fields are plain values, optional ones pointers, slices or maps that nil leaves out,
@@ -3060,6 +3060,60 @@ func (a *GeneratedAPI) WebhooksCreate(ctx context.Context, p *WebhooksCreateArgs
 func (a *GeneratedAPI) WebhooksDelete(ctx context.Context, id string) (json.RawMessage, error) {
 	path := "/api/v1/webhooks/" + url.PathEscape(id)
 	return a.c.apigenRequest(ctx, "DELETE", path, nil, nil)
+}
+
+// WebhooksDeliveriesArgs are the inputs of GeneratedAPI.WebhooksDeliveries.
+type WebhooksDeliveriesArgs struct {
+	// Limit is "limit" in the query.
+	Limit *int `query:"limit"`
+
+	// Cursor is "cursor" in the query.
+	Cursor *string `query:"cursor"`
+
+	// EndpointID is "endpointId" in the query.
+	EndpointID *string `query:"endpointId"`
+
+	// Status is "status" in the query. One of: pending, succeeded, failed.
+	Status *string `query:"status"`
+
+	// Type is "type" in the query.
+	Type *string `query:"type"`
+}
+
+// WebhooksDeliveries calls GET /api/v1/webhooks/deliveries: List webhook deliveries.
+func (a *GeneratedAPI) WebhooksDeliveries(ctx context.Context, p *WebhooksDeliveriesArgs) (json.RawMessage, error) {
+	if p == nil {
+		p = &WebhooksDeliveriesArgs{}
+	}
+	q := url.Values{}
+	if p.Limit != nil {
+		q.Set("limit", apigenQueryValue(*p.Limit))
+	}
+	if p.Cursor != nil {
+		q.Set("cursor", apigenQueryValue(*p.Cursor))
+	}
+	if p.EndpointID != nil {
+		q.Set("endpointId", apigenQueryValue(*p.EndpointID))
+	}
+	if p.Status != nil {
+		q.Set("status", apigenQueryValue(*p.Status))
+	}
+	if p.Type != nil {
+		q.Set("type", apigenQueryValue(*p.Type))
+	}
+	return a.c.apigenRequest(ctx, "GET", "/api/v1/webhooks/deliveries", q, nil)
+}
+
+// WebhooksDeliveriesRetry calls POST /api/v1/webhooks/deliveries/{id}/retry: Retry a webhook delivery.
+func (a *GeneratedAPI) WebhooksDeliveriesRetry(ctx context.Context, id string) (json.RawMessage, error) {
+	path := "/api/v1/webhooks/deliveries/" + url.PathEscape(id) + "/retry"
+	return a.c.apigenRequest(ctx, "POST", path, nil, nil)
+}
+
+// WebhooksGetDeliveries calls GET /api/v1/webhooks/deliveries/{id}: Get a webhook delivery, with every attempt made at it.
+func (a *GeneratedAPI) WebhooksGetDeliveries(ctx context.Context, id string) (json.RawMessage, error) {
+	path := "/api/v1/webhooks/deliveries/" + url.PathEscape(id)
+	return a.c.apigenRequest(ctx, "GET", path, nil, nil)
 }
 
 // WebhooksList calls GET /api/v1/webhooks: List webhooks.
