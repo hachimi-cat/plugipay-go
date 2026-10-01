@@ -384,8 +384,8 @@ func TestRefunds_Create_RoundTrip(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(envelopeBody(t, Refund{
 			ID: "rf_1", AccountID: "a", Amount: 5000, Currency: CurrencyIDR,
-			Status: RefundStatusPending, SourceType: SourceTypeCheckoutSession,
-			SourceID: "cs_1", CreatedAt: "x", UpdatedAt: "y",
+			Status: RefundStatusPending, ChargeID: "chg_1", Reason: "requested_by_customer",
+			CreatedAt: "x", UpdatedAt: "y",
 		}, nil))
 	}))
 	defer srv.Close()
@@ -453,7 +453,7 @@ func TestForMerchant_SendsOnBehalfOfHeader(t *testing.T) {
 		gotOBO = r.Header.Get("X-Plugipay-On-Behalf-Of")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(envelopeBody(t, AccountProfile{
-			ID: "u_1", Email: "x@x.x", EmailVerified: true, CreatedAt: "x",
+			ID: "u_1", Email: "x@x.x", EmailVerified: true,
 		}, nil))
 	}))
 	defer srv.Close()

@@ -84,7 +84,6 @@ const (
 	RefundStatusPending   RefundStatus = "pending"
 	RefundStatusSucceeded RefundStatus = "succeeded"
 	RefundStatusFailed    RefundStatus = "failed"
-	RefundStatusCanceled  RefundStatus = "canceled"
 )
 
 type AdapterKind string
@@ -115,15 +114,21 @@ const (
 // Resource shapes — mirror sdk/node/src/types.ts
 // ─────────────────────────────────────────────────────────────────
 
+// Customer is a customer of the merchant.
 type Customer struct {
 	ID         string  `json:"id"`
+	ARN        string  `json:"arn"`
 	AccountID  string  `json:"accountId"`
+	ExternalID *string `json:"externalId"` // your own id for it; unique per account and mode
 	Email      *string `json:"email"`
 	Name       *string `json:"name"`
 	Phone      *string `json:"phone"`
-	ExternalID *string `json:"externalId"`
-	CreatedAt  string  `json:"createdAt"`
-	UpdatedAt  string  `json:"updatedAt"`
+	// TaxID is the customer's tax id (NPWP in Indonesia).
+	TaxID                 *string           `json:"taxId"`
+	DefaultPaymentTokenID *string           `json:"defaultPaymentTokenId"`
+	Metadata              map[string]string `json:"metadata"`
+	CreatedAt             string            `json:"createdAt"`
+	UpdatedAt             string            `json:"updatedAt"`
 }
 
 type Plan struct {
@@ -159,76 +164,124 @@ type Price struct {
 	CreatedAt  string       `json:"createdAt"`
 }
 
+// CheckoutSessionCustomer is the customer a checkout session is for, as the session shows it.
+type CheckoutSessionCustomer struct {
+	ID         string  `json:"id"`
+	Name       *string `json:"name"`
+	Email      *string `json:"email"`
+	Phone      *string `json:"phone"`
+	ExternalID *string `json:"externalId"`
+}
+
+// CheckoutSession is a hosted checkout. Status is open, pending, pending_review,
+// completed, failed, expired or canceled.
 type CheckoutSession struct {
-	ID          string            `json:"id"`
-	AccountID   string            `json:"accountId"`
-	CustomerID  *string           `json:"customerId"`
-	Amount      int64             `json:"amount"`
-	Currency    CurrencyCode      `json:"currency"`
-	Status      string            `json:"status"`
-	Methods     []CheckoutMethod  `json:"methods"`
-	Adapter     *string           `json:"adapter"`
-	LineItems   json.RawMessage   `json:"lineItems"`
-	SuccessURL  string            `json:"successUrl"`
-	CancelURL   string            `json:"cancelUrl"`
-	HostedURL   string            `json:"hostedUrl"`
-	ExpiresAt   string            `json:"expiresAt"`
-	CompletedAt *string           `json:"completedAt"`
-	Metadata    map[string]string `json:"metadata"`
-	CreatedAt   string            `json:"createdAt"`
-	UpdatedAt   string            `json:"updatedAt"`
+	ID            string                   `json:"id"`
+	ARN           string                   `json:"arn"`
+	AccountID     string                   `json:"accountId"`
+	WorkspaceName *string                  `json:"workspaceName"` // the workspace's display name, where the response carries it
+	CustomerID    *string                  `json:"customerId"`
+	Customer      *CheckoutSessionCustomer `json:"customer"`
+	Mode          string                   `json:"mode"` // live or test
+	Status        string                   `json:"status"`
+	Amount        int64                    `json:"amount"`
+	Currency      CurrencyCode             `json:"currency"`
+	Methods       []CheckoutMethod         `json:"methods"`
+	PaymentMethod *string                  `json:"paymentMethod"` // the method the buyer paid with, once known
+	Adapter       *string                  `json:"adapter"`
+	LineItems     json.RawMessage          `json:"lineItems"`
+	SuccessURL    string                   `json:"successUrl"`
+	CancelURL     string                   `json:"cancelUrl"`
+	HostedURL     string                   `json:"hostedUrl"`
+	ExpiresAt     string                   `json:"expiresAt"`
+	CompletedAt   *string                  `json:"completedAt"`
+	// PaymentID is the provider's charge id once paid — what Refunds.Create's ChargeID takes.
+	PaymentID *string           `json:"paymentId"`
+	Metadata  map[string]string `json:"metadata"`
+	CreatedAt string            `json:"createdAt"`
+	UpdatedAt string            `json:"updatedAt"`
 }
 
+// InvoiceLine is one line of an invoice.
 type InvoiceLine struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Quantity    int64  `json:"quantity"`
-	UnitAmount  int64  `json:"unitAmount"`
-	Amount      int64  `json:"amount"`
+	ID          string            `json:"id"`
+	Description string            `json:"description"`
+	Quantity    int64             `json:"quantity"`
+	UnitAmount  int64             `json:"unitAmount"`
+	Amount      int64             `json:"amount"`
+	PriceID     *string           `json:"priceId"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
+// Invoice is an invoice. Status is draft, open, past_due, paid, void or uncollectible.
 type Invoice struct {
-	ID               string        `json:"id"`
-	AccountID        string        `json:"accountId"`
-	CustomerID       string        `json:"customerId"`
-	Status           string        `json:"status"`
-	Number           string        `json:"number"`
-	Currency         CurrencyCode  `json:"currency"`
-	Subtotal         int64         `json:"subtotal"`
-	Discount         int64         `json:"discount"`
-	Tax              int64         `json:"tax"`
-	Total            int64         `json:"total"`
-	AmountPaid       int64         `json:"amountPaid"`
-	AmountDue        int64         `json:"amountDue"`
-	DueAt            *string       `json:"dueAt"`
-	IssuedAt         *string       `json:"issuedAt"`
-	PaidAt           *string       `json:"paidAt"`
-	HostedInvoiceURL *string       `json:"hostedInvoiceUrl"`
-	Lines            []InvoiceLine `json:"lines"`
-	CreatedAt        string        `json:"createdAt"`
-	UpdatedAt        string        `json:"updatedAt"`
+	ID               string       `json:"id"`
+	ARN              string       `json:"arn"`
+	AccountID        string       `json:"accountId"`
+	CustomerID       string       `json:"customerId"`
+	SubscriptionID   *string      `json:"subscriptionId"`
+	Status           string       `json:"status"`
+	Number           string       `json:"number"`
+	Currency         CurrencyCode `json:"currency"`
+	Subtotal         int64        `json:"subtotal"`
+	Discount         int64        `json:"discount"`
+	Tax              int64        `json:"tax"`
+	Total            int64        `json:"total"`
+	AmountPaid       int64        `json:"amountPaid"`
+	AmountDue        int64        `json:"amountDue"`
+	DueAt            *string      `json:"dueAt"`
+	IssuedAt         *string      `json:"issuedAt"`
+	PaidAt           *string      `json:"paidAt"`
+	VoidedAt         *string      `json:"voidedAt"`
+	HostedInvoiceURL *string      `json:"hostedInvoiceUrl"`
+	// ChargeID is the provider charge that settled the invoice — set by Invoices.Get when a
+	// checkout session paid it (nil in lists and events, and when it was paid otherwise).
+	// Pass it to Refunds.Create; nil means it can't be refunded through a provider.
+	ChargeID           *string           `json:"chargeId"`
+	CollectionAttempts int               `json:"collectionAttempts"`
+	Lines              []InvoiceLine     `json:"lines"`
+	Metadata           map[string]string `json:"metadata"`
+	CreatedAt          string            `json:"createdAt"`
+	UpdatedAt          string            `json:"updatedAt"`
 }
 
+// Subscription is a customer's subscription to a plan. Status is trialing, active,
+// past_due, canceled, paused or incomplete.
 type Subscription struct {
 	ID                 string  `json:"id"`
+	ARN                string  `json:"arn"`
 	AccountID          string  `json:"accountId"`
 	CustomerID         string  `json:"customerId"`
 	PlanID             string  `json:"planId"`
+	PriceID            *string `json:"priceId"`
 	Status             string  `json:"status"`
 	CurrentPeriodStart string  `json:"currentPeriodStart"`
 	CurrentPeriodEnd   string  `json:"currentPeriodEnd"`
-	CancelAtPeriodEnd  bool    `json:"cancelAtPeriodEnd"`
-	TrialEndsAt        *string `json:"trialEndsAt"`
-	CreatedAt          string  `json:"createdAt"`
-	UpdatedAt          string  `json:"updatedAt"`
+	TrialEnd           *string `json:"trialEnd"` // nil without a trial
+	// CancelAt is set by a period-end cancel: the subscription cancels then.
+	CancelAt   *string `json:"cancelAt"`
+	CanceledAt *string `json:"canceledAt"`
+	// CanceledReason is customer_portal, merchant, failed_payment or user_request.
+	CanceledReason        *string           `json:"canceledReason"`
+	PausedAt              *string           `json:"pausedAt"`
+	DefaultPaymentTokenID *string           `json:"defaultPaymentTokenId"`
+	DiscountCouponID      *string           `json:"discountCouponId"`
+	CollectionMethod      string            `json:"collectionMethod"` // charge_automatically or send_invoice
+	Metadata              map[string]string `json:"metadata"`
+	CreatedAt             string            `json:"createdAt"`
+	UpdatedAt             string            `json:"updatedAt"`
 }
 
+// PortalSession is a billing-portal link for a customer: open URL in their browser.
 type PortalSession struct {
 	ID         string `json:"id"`
+	ARN        string `json:"arn"`
+	AccountID  string `json:"accountId"`
 	CustomerID string `json:"customerId"`
 	URL        string `json:"url"`
 	ReturnURL  string `json:"returnUrl"`
 	ExpiresAt  string `json:"expiresAt"`
+	CreatedAt  string `json:"createdAt"`
 }
 
 type PartnerWorkspace struct {
@@ -398,12 +451,20 @@ type WebhookDeliveryAttempt struct {
 	AttemptedAt string  `json:"attemptedAt"`
 }
 
+// EventRecord is an event as Events.List / Events.Get return it.
 type EventRecord struct {
-	ID         string          `json:"id"`
-	Type       string          `json:"type"`
-	AccountID  string          `json:"accountId"`
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`
+	AccountID *string `json:"accountId"`
+	// Mode is live or test; nil for events from before events carried one.
+	Mode       *string         `json:"mode"`
 	OccurredAt string          `json:"occurredAt"`
 	Data       json.RawMessage `json:"data"`
+	// Metadata is delivery bookkeeping: idempotencyKey, mode, requestId, source, replayOf.
+	Metadata  json.RawMessage `json:"metadata"`
+	CreatedAt string          `json:"createdAt"`
+	// PublishedAt is when the outbox worker sent it to your endpoints; nil while queued.
+	PublishedAt *string `json:"publishedAt"`
 }
 
 type ReceiptSummary struct {
@@ -439,18 +500,65 @@ type PartnerUsageSummary struct {
 	Total    int64              `json:"total"`
 }
 
+// Refund is money sent back for a charge. Status is pending, succeeded or failed.
 type Refund struct {
-	ID            string       `json:"id"`
-	AccountID     string       `json:"accountId"`
-	Amount        int64        `json:"amount"`
-	Currency      CurrencyCode `json:"currency"`
-	Status        RefundStatus `json:"status"`
-	Reason        *string      `json:"reason"`
-	SourceType    SourceType   `json:"sourceType"`
-	SourceID      string       `json:"sourceId"`
-	FailureReason *string      `json:"failureReason"`
-	CreatedAt     string       `json:"createdAt"`
-	UpdatedAt     string       `json:"updatedAt"`
+	ID        string `json:"id"`
+	ARN       string `json:"arn"`
+	AccountID string `json:"accountId"`
+	// ChargeID is the provider charge refunded (a checkout session's PaymentID).
+	ChargeID  string       `json:"chargeId"`
+	InvoiceID *string      `json:"invoiceId"` // the invoice it refunds, when the charge paid one
+	Amount    int64        `json:"amount"`
+	Currency  CurrencyCode `json:"currency"`
+	// Reason is requested_by_customer, duplicate, fraudulent or other.
+	Reason string       `json:"reason"`
+	Status RefundStatus `json:"status"`
+	// FailureCode / FailureMessage are the provider's reason (failed only).
+	FailureCode    *string           `json:"failureCode"`
+	FailureMessage *string           `json:"failureMessage"`
+	Metadata       map[string]string `json:"metadata"`
+	CreatedAt      string            `json:"createdAt"`
+	UpdatedAt      string            `json:"updatedAt"`
+}
+
+// GiftCard is a gift card (CustomerID nil) or store credit (CustomerID set). Status is
+// active, redeemed, void or expired.
+type GiftCard struct {
+	ID             string            `json:"id"`
+	ARN            string            `json:"arn"`
+	AccountID      string            `json:"accountId"`
+	Mode           string            `json:"mode"`
+	Code           string            `json:"code"`
+	Currency       CurrencyCode      `json:"currency"`
+	InitialBalance int64             `json:"initialBalance"`
+	Balance        int64             `json:"balance"`
+	Status         string            `json:"status"`
+	CustomerID     *string           `json:"customerId"`
+	Kind           string            `json:"kind"` // store_credit or gift_card
+	ExpiresAt      *string           `json:"expiresAt"`
+	Note           *string           `json:"note"`
+	IssuedSource   *string           `json:"issuedSource"`
+	IssuedRef      *string           `json:"issuedRef"`
+	Metadata       map[string]string `json:"metadata"`
+	CreatedAt      string            `json:"createdAt"`
+	UpdatedAt      string            `json:"updatedAt"`
+}
+
+// GiftCardEntry is one movement of a card's balance (Kind issue, redeem, topup or void).
+type GiftCardEntry struct {
+	ID                string       `json:"id"`
+	AccountID         string       `json:"accountId"`
+	GiftCardID        string       `json:"giftCardId"`
+	Kind              string       `json:"kind"`
+	Delta             int64        `json:"delta"`
+	BalanceAfter      int64        `json:"balanceAfter"`
+	Currency          CurrencyCode `json:"currency"`
+	ExternalSource    string       `json:"externalSource"`
+	ExternalRef       string       `json:"externalRef"`
+	CheckoutSessionID *string      `json:"checkoutSessionId"`
+	LedgerTxID        *string      `json:"ledgerTxId"`
+	Note              *string      `json:"note"`
+	CreatedAt         string       `json:"createdAt"`
 }
 
 // AdapterConfig is a connected provider, per mode. Secrets are never returned:
@@ -513,45 +621,101 @@ type UploadedFile struct {
 	FileSize int64 `json:"fileSize"`
 }
 
+// Workspace is a workspace (a Huudis account). A key's Workspaces.List is its own
+// workspace, with ID, Name, Slug and Role only; a person's comes from Huudis with the rest.
 type Workspace struct {
-	ID            string  `json:"id"`
-	AccountID     string  `json:"accountId"`
-	BrandName     *string `json:"brandName"`
-	BusinessEmail *string `json:"businessEmail"`
-	CreatedAt     string  `json:"createdAt"`
-	UpdatedAt     string  `json:"updatedAt"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Slug              string  `json:"slug"`
+	Role              string  `json:"role,omitempty"` // owner, admin or member
+	CreatedAt         string  `json:"createdAt,omitempty"`
+	JoinedAt          string  `json:"joinedAt,omitempty"`
+	IsActive          bool    `json:"isActive,omitempty"`
+	IsForjioInternal  bool    `json:"isForjioInternal,omitempty"`
+	PendingDeletionAt *string `json:"pendingDeletionAt,omitempty"`
 }
 
+// WorkspaceDeletion is Workspaces.Delete's answer: the deletion happens at PendingDeletionAt.
+type WorkspaceDeletion struct {
+	Scheduled         bool   `json:"scheduled"`
+	PendingDeletionAt string `json:"pendingDeletionAt"`
+}
+
+// AccountProfile is the signed-in person's Huudis profile. When Huudis can't be reached
+// the API answers from the session with ID, Email, Name and EmailVerified only.
 type AccountProfile struct {
-	ID            string  `json:"id"`
-	Email         string  `json:"email"`
-	EmailVerified bool    `json:"emailVerified"`
-	Name          *string `json:"name"`
-	MfaEnrolled   bool    `json:"mfaEnrolled"`
-	CreatedAt     string  `json:"createdAt"`
+	ID                string                     `json:"id"`
+	Email             string                     `json:"email"`
+	Name              *string                    `json:"name"`
+	EmailVerified     bool                       `json:"emailVerified"`
+	Locale            *string                    `json:"locale,omitempty"`
+	HasPassword       *bool                      `json:"hasPassword,omitempty"` // false: signs in with Google / Apple only
+	MfaEnabled        *bool                      `json:"mfaEnabled,omitempty"`
+	PendingDeletionAt *string                    `json:"pendingDeletionAt,omitempty"`
+	CreatedAt         *string                    `json:"createdAt,omitempty"`
+	LastLoginAt       *string                    `json:"lastLoginAt,omitempty"`
+	Memberships       []AccountProfileMembership `json:"memberships,omitempty"`
 }
 
+// AccountProfileMembership is one workspace the person belongs to.
+type AccountProfileMembership struct {
+	Role     string `json:"role"`
+	JoinedAt string `json:"joinedAt"`
+	Account  struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	} `json:"account"`
+}
+
+// AccountProfileUpdate is Account.Update's answer: the fields it changes.
+type AccountProfileUpdate struct {
+	ID     string  `json:"id"`
+	Name   *string `json:"name"`
+	Locale *string `json:"locale"`
+}
+
+// BrowserSession is one of the person's signed-in sessions.
 type BrowserSession struct {
 	ID         string  `json:"id"`
 	UserAgent  *string `json:"userAgent"`
-	IPAddress  *string `json:"ipAddress"`
-	Current    bool    `json:"current"`
+	IP         *string `json:"ip"`
 	CreatedAt  string  `json:"createdAt"`
-	LastSeenAt string  `json:"lastSeenAt"`
+	LastUsedAt *string `json:"lastUsedAt"`
+	ExpiresAt  string  `json:"expiresAt"`
+	Current    bool    `json:"current"` // the session making this request
 }
 
+// LinkedAccount is a Google or Apple sign-in linked to the person.
 type LinkedAccount struct {
-	Provider string  `json:"provider"`
-	Subject  string  `json:"subject"`
+	ID       string  `json:"id"`
+	Provider string  `json:"provider"` // google or apple
 	Email    *string `json:"email"`
 	LinkedAt string  `json:"linkedAt"`
 }
 
+// LinkedAccounts is Account.ListLinked's answer: the linked sign-ins, and whether the
+// person also has a password.
+type LinkedAccounts struct {
+	HasPassword bool            `json:"hasPassword"`
+	Providers   []LinkedAccount `json:"providers"`
+}
+
+// WorkspaceMember is a member of the active workspace (its Huudis IAM users).
 type WorkspaceMember struct {
-	ID       string `json:"id"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	JoinedAt string `json:"joinedAt"`
+	ID            string  `json:"id"`
+	Email         string  `json:"email"`
+	Name          *string `json:"name"`
+	EmailVerified bool    `json:"emailVerified"`
+	Role          string  `json:"role"` // owner, admin or member
+	JoinedAt      string  `json:"joinedAt"`
+	LastLoginAt   *string `json:"lastLoginAt"`
+	CreatedAt     string  `json:"createdAt"`
+	IsYou         bool    `json:"isYou"` // the person making this request
+	Groups        []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"groups"`
 }
 
 // BillingTier is one of Plugipay's own plans (Billing.ListTiers). A nil limit is
@@ -611,10 +775,11 @@ type CheckoutSettings struct {
 	MethodSupport    map[string][]string `json:"methodSupport"`    // computed
 }
 
+// AdminPortalIdentity is AdminPortal.Me's answer: the account the probe was scoped to,
+// and whether it is a Forjio-internal workspace.
 type AdminPortalIdentity struct {
-	IdentityID string `json:"identityId"`
-	Email      string `json:"email"`
-	Role       string `json:"role"`
+	AccountID        string `json:"accountId"`
+	IsForjioInternal bool   `json:"isForjioInternal"`
 }
 
 // WebhookEvent is the parsed webhook payload. The shape is type-tagged:
@@ -629,9 +794,16 @@ type WebhookEvent struct {
 	Data       WebhookEventData `json:"data"`
 }
 
-// WebhookEventData wraps the resource snapshot at event time. Object is
-// kept as a RawMessage so callers can decode it into the concrete type
-// they care about.
+// WebhookEventData is an event's data: Object is the resource after the change (decode it
+// into the struct its Type names); AggregateType / AggregateID name that resource. A few
+// types carry more — To (invoice.sent), Reason (invoice.failed), Entry (gift_card.redeemed
+// and .topped_up), DaysAdvanced (subscription.renewed from a test clock).
 type WebhookEventData struct {
-	Object json.RawMessage `json:"object"`
+	Object        json.RawMessage `json:"object"`
+	AggregateType string          `json:"aggregateType"`
+	AggregateID   string          `json:"aggregateId"`
+	To            *string         `json:"to,omitempty"`
+	Reason        *string         `json:"reason,omitempty"`
+	Entry         json.RawMessage `json:"entry,omitempty"`
+	DaysAdvanced  *int            `json:"daysAdvanced,omitempty"`
 }

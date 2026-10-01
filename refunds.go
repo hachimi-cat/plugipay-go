@@ -12,11 +12,14 @@ type RefundCreateInput struct {
 	Reason     *string    `json:"reason,omitempty"`
 }
 
+// RefundListParams filters Refunds.List. ChargeID lists one payment's refunds (a checkout
+// session's PaymentID, or its own ID for a manual payment).
 type RefundListParams struct {
 	Limit    *int          `json:"limit,omitempty"`
 	Cursor   *string       `json:"cursor,omitempty"`
+	Order    *string       `json:"order,omitempty"` // asc or desc (the default)
 	Status   *RefundStatus `json:"status,omitempty"`
-	SourceID *string       `json:"sourceId,omitempty"`
+	ChargeID *string       `json:"chargeId,omitempty"`
 }
 
 func (r *RefundsResource) Create(ctx context.Context, in RefundCreateInput) (*Refund, error) {
@@ -52,8 +55,9 @@ func (r *RefundsResource) List(ctx context.Context, params RefundListParams) (Pa
 		Path: "/api/v1/refunds" + qs(map[string]any{
 			"limit":    params.Limit,
 			"cursor":   params.Cursor,
+			"order":    params.Order,
 			"status":   statusVal,
-			"sourceId": params.SourceID,
+			"chargeId": params.ChargeID,
 		}),
 	})
 }

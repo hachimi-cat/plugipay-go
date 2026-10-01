@@ -6,25 +6,31 @@ import "context"
 type AccountResource struct{ c *Client }
 
 type AccountUpdateInput struct {
-	Name *string `json:"name,omitempty"`
+	Name   *string `json:"name,omitempty"`
+	Locale *string `json:"locale,omitempty"`
 }
 
+// AccountEmailChangeInput starts an email change: a link goes to Email. Password is the
+// current one (ignored for a person without a password).
 type AccountEmailChangeInput struct {
-	NewEmail string `json:"newEmail"`
+	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 type AccountEmailChangeResult struct {
-	PendingVerification bool `json:"pendingVerification"`
+	Pending  bool   `json:"pending"`
+	NewEmail string `json:"newEmail"`
 }
 
+// AccountPasswordChangeInput: CurrentPassword is required unless the person has none yet
+// (signs in with Google / Apple only).
 type AccountPasswordChangeInput struct {
-	CurrentPassword string `json:"currentPassword"`
+	CurrentPassword string `json:"currentPassword,omitempty"`
 	NewPassword     string `json:"newPassword"`
 }
 
 type AccountRevokeAllResult struct {
-	Revoked int64 `json:"revoked"`
+	RevokedCount int64 `json:"revokedCount"`
 }
 
 func (r *AccountResource) Get(ctx context.Context) (*AccountProfile, error) {
@@ -38,8 +44,9 @@ func (r *AccountResource) Get(ctx context.Context) (*AccountProfile, error) {
 	return &out, nil
 }
 
-func (r *AccountResource) Update(ctx context.Context, patch AccountUpdateInput) (*AccountProfile, error) {
-	var out AccountProfile
+// Update changes the name or locale and answers with those fields.
+func (r *AccountResource) Update(ctx context.Context, patch AccountUpdateInput) (*AccountProfileUpdate, error) {
+	var out AccountProfileUpdate
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "PATCH", Path: "/api/v1/account", Body: patch,
 	}, &out)
@@ -78,15 +85,17 @@ func (r *AccountResource) RevokeAllSessions(ctx context.Context) (*AccountRevoke
 	return &out, nil
 }
 
-func (r *AccountResource) ListLinked(ctx context.Context) ([]LinkedAccount, error) {
-	var out []LinkedAccount
+// ListLinked returns the linked Google / Apple sign-ins and whether the person also has
+// a password.
+func (r *AccountResource) ListLinked(ctx context.Context) (*LinkedAccounts, error) {
+	var out LinkedAccounts
 	err := r.c.Do(ctx, RequestOptions{
 		Method: "GET", Path: "/api/v1/account/linked-accounts",
 	}, &out)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return &out, nil
 }
 
 func (r *AccountResource) Unlink(ctx context.Context, provider string) error {

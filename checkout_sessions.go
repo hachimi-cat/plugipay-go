@@ -26,8 +26,13 @@ type CheckoutSessionCreateInput struct {
 
 type CheckoutSessionListParams struct {
 	Limit      *int    `json:"limit,omitempty"`
+	Cursor     *string `json:"cursor,omitempty"` // the previous page's Cursor
+	Order      *string `json:"order,omitempty"`  // asc or desc (the default)
 	Status     *string `json:"status,omitempty"`
 	CustomerID *string `json:"customerId,omitempty"`
+	// CreatedAfter / CreatedBefore are ISO-8601 bounds on CreatedAt.
+	CreatedAfter  *string `json:"createdAfter,omitempty"`
+	CreatedBefore *string `json:"createdBefore,omitempty"`
 }
 
 func (r *CheckoutSessionsResource) Create(ctx context.Context, in CheckoutSessionCreateInput) (*CheckoutSession, error) {
@@ -61,9 +66,13 @@ func (r *CheckoutSessionsResource) List(ctx context.Context, params CheckoutSess
 	return DoList[CheckoutSession](ctx, r.c, RequestOptions{
 		Method: "GET",
 		Path: "/api/v1/checkout-sessions" + qs(map[string]any{
-			"limit":      params.Limit,
-			"status":     params.Status,
-			"customerId": params.CustomerID,
+			"limit":         params.Limit,
+			"cursor":        params.Cursor,
+			"order":         params.Order,
+			"status":        params.Status,
+			"customerId":    params.CustomerID,
+			"createdAfter":  params.CreatedAfter,
+			"createdBefore": params.CreatedBefore,
 		}),
 	})
 }

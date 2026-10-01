@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+- Structs match what the API returns (checked against the live API in the backend's tests): `Customer`, `CheckoutSession` (+`CheckoutSessionCustomer`), `Invoice`, `InvoiceLine`, `Subscription` (no more `CancelAtPeriodEnd` / `TrialEndsAt`; `TrialEnd`, `CancelAt`, …), `PortalSession`, `Refund` (`ChargeID`, `FailureCode` / `FailureMessage` replace `SourceType` / `SourceID` / `FailureReason`; `RefundStatusCanceled` removed), `EventRecord`, `Workspace`, `AccountProfile`, `BrowserSession`, `LinkedAccount`, `WorkspaceMember`, `AdminPortalIdentity` (`AccountID`, `IsForjioInternal`); new `GiftCard`, `GiftCardEntry`, `LinkedAccounts`, `WorkspaceDeletion`, `AccountProfileUpdate`. `WebhookEventData` carries `AggregateType`, `AggregateID`, `To`, `Reason`, `Entry`, `DaysAdvanced`.
+- Fixed calls: `Workspaces.Create` / `Update` send `Name`, `Workspaces.Delete` returns `*WorkspaceDeletion`; `Account.ChangeEmail` sends `email`; `Account.Update` returns `*AccountProfileUpdate`; `Account.ListLinked` returns `*LinkedAccounts`; `AccountRevokeAllResult.RevokedCount`.
+- New: `Customers.Delete`, `Subscriptions.Update`, `Subscriptions.CancelWithReason`; `Cursor` / `Order` on checkout-session and subscription list params, `CreatedAfter` / `CreatedBefore` on checkout sessions, `Order` / `ExternalID` / `CreatedAfter` on customers; `RefundListParams.ChargeID` (its `SourceID` was ignored); `CustomerCreateInput.TaxID` / `DefaultPaymentTokenID`.
+
 ## 0.5.0
 - `WebhookEndpoints.Update(ctx, id, WebhookEndpointUpdateInput)` (`Active: &true` re-enables an endpoint Plugipay switched off for failing and clears its failure streak), and the delivery log: `WebhookEndpoints.ListDeliveries(ctx, WebhookDeliveryListParams)` (a `Page[WebhookDelivery]`), `GetDelivery`, `RetryDelivery`. New types `WebhookDelivery`, `WebhookDeliveryAttempt`, `WebhookDeliveryStatus`.
 - `WebhookEndpoint` has `Mode`, `ConsecutiveFailures`, `FailingSince`, `DisabledAt` and `DisabledReason`.

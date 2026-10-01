@@ -63,14 +63,15 @@ func (r *UploadsResource) Image(ctx context.Context, in UploadImageInput) (*Uplo
 // WorkspacesResource — /api/v1/workspaces (merchant-facing CRUD)
 type WorkspacesResource struct{ c *Client }
 
+// WorkspaceCreateInput names a new workspace you own (its slug is made from the name).
 type WorkspaceCreateInput struct {
-	BrandName     *string `json:"brandName,omitempty"`
-	BusinessEmail *string `json:"businessEmail,omitempty"`
+	Name string `json:"name"`
 }
 
+// WorkspaceUpdateInput renames a workspace (owners and admins); the answer carries its
+// ID, Name and Slug.
 type WorkspaceUpdateInput struct {
-	BrandName     *string `json:"brandName,omitempty"`
-	BusinessEmail *string `json:"businessEmail,omitempty"`
+	Name string `json:"name"`
 }
 
 func (r *WorkspacesResource) List(ctx context.Context) ([]Workspace, error) {
@@ -107,8 +108,15 @@ func (r *WorkspacesResource) Update(ctx context.Context, id string, patch Worksp
 	return &out, nil
 }
 
-func (r *WorkspacesResource) Delete(ctx context.Context, id string) error {
-	return r.c.Do(ctx, RequestOptions{
+// Delete schedules the workspace's deletion (owners only); it happens at
+// PendingDeletionAt.
+func (r *WorkspacesResource) Delete(ctx context.Context, id string) (*WorkspaceDeletion, error) {
+	var out WorkspaceDeletion
+	err := r.c.Do(ctx, RequestOptions{
 		Method: "DELETE", Path: "/api/v1/workspaces/" + id,
-	}, nil)
+	}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
