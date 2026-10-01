@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"strconv"
 )
@@ -16,6 +17,8 @@ import (
 // or the JSON body. It returns the envelope's data, as JSON.
 type apigenTransport interface {
 	apigenRequest(ctx context.Context, method, path string, query url.Values, body map[string]any) (json.RawMessage, error)
+	// apigenForm sends a file upload: the form fields and the files as multipart/form-data.
+	apigenForm(ctx context.Context, method, path string, query url.Values, form map[string]string, files map[string]FormFile) (json.RawMessage, error)
 }
 
 // GeneratedAPI has all 139 feature routes of the Plugipay API, one method each
@@ -27,6 +30,12 @@ type GeneratedAPI struct{ c apigenTransport }
 
 // Ptr returns a pointer to v, for the optional fields of the *Args structs.
 func Ptr[T any](v T) *T { return &v }
+
+// FormFile is a file for an upload: the file name it is sent under, and its content.
+type FormFile struct {
+	Name    string
+	Content io.Reader
+}
 
 // AccountDeleteArgs are the inputs of GeneratedAPI.AccountDelete.
 type AccountDeleteArgs struct {
@@ -2322,10 +2331,25 @@ func (a *GeneratedAPI) PublicCheckoutSessionsCharge(ctx context.Context, id stri
 	return a.c.apigenRequest(ctx, "POST", path, nil, payload)
 }
 
-// PublicCheckoutSessionsProofImage calls POST /api/v1/public/checkout/sessions/{id}/proof-image: Proof image a session.
-func (a *GeneratedAPI) PublicCheckoutSessionsProofImage(ctx context.Context, id string) (json.RawMessage, error) {
+// PublicCheckoutSessionsProofImageArgs are the inputs of GeneratedAPI.PublicCheckoutSessionsProofImage.
+type PublicCheckoutSessionsProofImageArgs struct {
+	// File is "file" in the form, required. The file to upload.
+	File FormFile `form:"file"`
+}
+
+// PublicCheckoutSessionsProofImage calls POST /api/v1/public/checkout/sessions/{id}/proof-image: Upload the buyer's transfer receipt (PNG, JPEG or WEBP, at most 4 MB) for a session awaiting manual review.
+func (a *GeneratedAPI) PublicCheckoutSessionsProofImage(ctx context.Context, id string, p *PublicCheckoutSessionsProofImageArgs) (json.RawMessage, error) {
+	if p == nil {
+		p = &PublicCheckoutSessionsProofImageArgs{}
+	}
+	form := map[string]string{}
+	files := map[string]FormFile{}
+	if p.File.Content == nil {
+		return nil, apigenMissing("PublicCheckoutSessionsProofImage", "File")
+	}
+	files["file"] = p.File
 	path := "/api/v1/public/checkout/sessions/" + url.PathEscape(id) + "/proof-image"
-	return a.c.apigenRequest(ctx, "POST", path, nil, nil)
+	return a.c.apigenForm(ctx, "POST", path, nil, form, files)
 }
 
 // PublicCheckoutSessionsReceipt calls GET /api/v1/public/checkout/sessions/{id}/receipt: Public customer-facing receipt by session id.
@@ -2973,9 +2997,24 @@ func (a *GeneratedAPI) TestClocksAdvance(ctx context.Context, p *TestClocksAdvan
 	return a.c.apigenRequest(ctx, "POST", "/api/v1/test/clocks/advance", nil, payload)
 }
 
-// UploadsImage calls POST /api/v1/uploads/image: Create an image.
-func (a *GeneratedAPI) UploadsImage(ctx context.Context) (json.RawMessage, error) {
-	return a.c.apigenRequest(ctx, "POST", "/api/v1/uploads/image", nil, nil)
+// UploadsImageArgs are the inputs of GeneratedAPI.UploadsImage.
+type UploadsImageArgs struct {
+	// File is "file" in the form, required. The file to upload.
+	File FormFile `form:"file"`
+}
+
+// UploadsImage calls POST /api/v1/uploads/image: Upload an image (PNG, JPEG or WEBP, at most 5 MB) as `multipart/form-data`, the file in the field `file` — a logo, a QRIS image.
+func (a *GeneratedAPI) UploadsImage(ctx context.Context, p *UploadsImageArgs) (json.RawMessage, error) {
+	if p == nil {
+		p = &UploadsImageArgs{}
+	}
+	form := map[string]string{}
+	files := map[string]FormFile{}
+	if p.File.Content == nil {
+		return nil, apigenMissing("UploadsImage", "File")
+	}
+	files["file"] = p.File
+	return a.c.apigenForm(ctx, "POST", "/api/v1/uploads/image", nil, form, files)
 }
 
 // WebhooksCreateArgs are the inputs of GeneratedAPI.WebhooksCreate.

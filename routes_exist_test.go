@@ -60,6 +60,9 @@ func TestEveryMethodCallsARouteInTheSpec(t *testing.T) {
 			switch {
 			case in == reflect.TypeOf((*context.Context)(nil)).Elem():
 				args = append(args, reflect.ValueOf(context.Background()))
+			case in == reflect.TypeOf(UploadImageInput{}):
+				// an upload needs its bytes (it refuses before any request without them)
+				args = append(args, reflect.ValueOf(UploadImageInput{File: strings.NewReader("x")}))
 			case in.Kind() == reflect.String:
 				// Ids in the path: "__1__", "__2__", ... stand for its parameters.
 				args = append(args, reflect.ValueOf("__"+string(rune('0'+i))+"__").Convert(in))

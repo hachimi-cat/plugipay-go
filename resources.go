@@ -412,14 +412,14 @@ type Template struct {
 	UpdatedAt string         `json:"updatedAt"`
 }
 
+// UploadedFile is an uploaded image (POST /api/v1/uploads/image).
 type UploadedFile struct {
-	ID        string `json:"id"`
-	AccountID string `json:"accountId"`
-	URL       string `json:"url"`
-	Mime      string `json:"mime"`
-	Bytes     int64  `json:"bytes"`
-	Filename  string `json:"filename"`
-	CreatedAt string `json:"createdAt"`
+	// URL is where it is served: /api/v1/files/<name>, relative to plugipay.com.
+	URL string `json:"url"`
+	// FileName is the name it was sent under.
+	FileName string `json:"fileName"`
+	// FileSize is its size in bytes.
+	FileSize int64 `json:"fileSize"`
 }
 
 type Workspace struct {

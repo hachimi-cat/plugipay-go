@@ -1,24 +1,61 @@
 package plugipay
 
-import "context"
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"strings"
+)
 
 // UploadsResource — /api/v1/uploads
 type UploadsResource struct{ c *Client }
 
+// UploadImageInput is an image for UploadsResource.Image: its bytes (File), or —
+// the 0.2 shape — base64 text (Base64 with Filename and Mime).
 type UploadImageInput struct {
-	Filename string `json:"filename"`
-	Mime     string `json:"mime"`
-	Base64   string `json:"base64"`
+	// File is the image (PNG, JPEG or WEBP, at most 5 MB).
+	File io.Reader
+	// Filename is the name it is sent under; "image" when empty.
+	Filename string
+	// ContentType of the file part; optional — Plugipay tells the type from the bytes.
+	ContentType string
+	// Base64 is the image as base64 text, used when File is nil.
+	Base64 string
+	// Mime is ContentType's 0.2 name.
+	Mime string
 }
 
-// Image uploads a base64-encoded image. Pass raw bytes + filename + mime.
+// Image uploads an image, sent as multipart/form-data with the file in the
+// field "file". It returns the image's URL (relative, served by plugipay.com).
 func (r *UploadsResource) Image(ctx context.Context, in UploadImageInput) (*UploadedFile, error) {
-	var out UploadedFile
-	err := r.c.Do(ctx, RequestOptions{
-		Method: "POST", Path: "/api/v1/uploads/image", Body: in,
-	}, &out)
+	content := in.File
+	if content == nil && in.Base64 != "" {
+		raw, err := base64.StdEncoding.DecodeString(in.Base64)
+		if err != nil {
+			return nil, newErr(0, "invalid_request", "UploadImageInput.Base64 is not base64: "+err.Error())
+		}
+		content = strings.NewReader(string(raw))
+	}
+	if content == nil {
+		return nil, newErr(0, "invalid_request", "UploadImageInput needs File (or Base64)")
+	}
+	name := in.Filename
+	if name == "" {
+		name = "image"
+	}
+	ct := in.ContentType
+	if ct == "" {
+		ct = in.Mime
+	}
+	data, err := r.c.sendForm(ctx, "POST", "/api/v1/uploads/image", nil,
+		[]formPart{{field: "file", filename: name, contentType: ct, content: content}})
 	if err != nil {
 		return nil, err
+	}
+	var out UploadedFile
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, newErr(0, "invalid_response", "failed to decode the upload: "+err.Error())
 	}
 	return &out, nil
 }

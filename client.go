@@ -27,9 +27,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -181,6 +184,79 @@ func (c *Client) apigenRequest(ctx context.Context, method, path string, query u
 	return env.Data, nil
 }
 
+// apigenForm is the call behind a generated file-upload method (api_generated.go):
+// the form fields and the files as multipart/form-data, signed like every other
+// call (over an empty body: the server does not hash a multipart body), with an
+// idempotency key.
+func (c *Client) apigenForm(ctx context.Context, method, path string, query url.Values, form map[string]string, files map[string]FormFile) (json.RawMessage, error) {
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
+	parts := make([]formPart, 0, len(files))
+	for field, f := range files {
+		parts = append(parts, formPart{field: field, filename: f.Name, content: f.Content})
+	}
+	return c.sendForm(ctx, strings.ToUpper(method), path, form, parts)
+}
+
+// formPart is one file of a multipart upload.
+type formPart struct {
+	field, filename, contentType string
+	content                      io.Reader
+}
+
+func (c *Client) sendForm(ctx context.Context, method, path string, form map[string]string, files []formPart) (json.RawMessage, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	keys := make([]string, 0, len(form))
+	for k := range form {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if err := w.WriteField(k, form[k]); err != nil {
+			return nil, newErr(0, "serialize_failed", err.Error())
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].field < files[j].field })
+	for _, f := range files {
+		name := f.filename
+		if name == "" {
+			name = f.field
+		}
+		h := textproto.MIMEHeader{}
+		h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, quoteEscaper.Replace(f.field), quoteEscaper.Replace(name)))
+		ct := f.contentType
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		h.Set("Content-Type", ct)
+		part, err := w.CreatePart(h)
+		if err != nil {
+			return nil, newErr(0, "serialize_failed", err.Error())
+		}
+		if f.content != nil {
+			if _, err := io.Copy(part, f.content); err != nil {
+				return nil, newErr(0, "serialize_failed", "failed to read the file: "+err.Error())
+			}
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, newErr(0, "serialize_failed", err.Error())
+	}
+	opts := RequestOptions{Method: method, Path: path}
+	if method != http.MethodGet {
+		opts.IdempotencyKey = genIdem()
+	}
+	env, err := c.send(ctx, opts, buf.Bytes(), "", w.FormDataContentType())
+	if err != nil {
+		return nil, err
+	}
+	return env.Data, nil
+}
+
+var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+
 // ForMerchant returns a shallow clone scoped to a different on-behalf-of
 // account id — useful when a platform-admin key is reused across many
 // merchant accounts. The clone shares the underlying *http.Client.
@@ -281,16 +357,22 @@ func (c *Client) do(ctx context.Context, opts RequestOptions) (*APIEnvelope, err
 		}
 		bodyBytes = b
 	}
-
-	bodyStr := ""
+	contentType := ""
 	if bodyBytes != nil {
-		bodyStr = string(bodyBytes)
+		contentType = "application/json"
 	}
+	return c.send(ctx, opts, bodyBytes, string(bodyBytes), contentType)
+}
 
+// send makes one request: body is what goes on the wire, signedBody what the
+// signature covers (the JSON body; "" for a multipart upload, whose bytes the
+// server does not hash). Each call is signed with a fresh timestamp when it is
+// sent, so a retry made by calling again is signed anew.
+func (c *Client) send(ctx context.Context, opts RequestOptions, body []byte, signedBody, contentType string) (*APIEnvelope, error) {
 	url := c.baseURL + opts.Path
 	var reqBody io.Reader
-	if bodyBytes != nil {
-		reqBody = bytes.NewReader(bodyBytes)
+	if body != nil {
+		reqBody = bytes.NewReader(body)
 	}
 	req, err := http.NewRequestWithContext(ctx, opts.Method, url, reqBody)
 	if err != nil {
@@ -305,14 +387,14 @@ func (c *Client) do(ctx context.Context, opts RequestOptions) (*APIEnvelope, err
 		sig := Sign(c.secret, SignInput{
 			Method:         opts.Method,
 			Path:           opts.Path,
-			Body:           bodyStr,
+			Body:           signedBody,
 			IdempotencyKey: opts.IdempotencyKey,
 		})
 		req.Header.Set("Authorization", AuthorizationHeader(c.keyID, sig.Signature))
 		req.Header.Set("X-Plugipay-Timestamp", sig.Timestamp)
 	}
-	if bodyBytes != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if opts.IdempotencyKey != "" {
 		req.Header.Set("Idempotency-Key", opts.IdempotencyKey)
